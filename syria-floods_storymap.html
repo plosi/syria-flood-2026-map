@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset='utf-8' />
+    <title>Syria: Floods</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <!-- SRI hashes are pinned to the versions above; update both together. -->
+    <script src='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js' integrity='sha384-5+cfbwT0iiub6VsQAdn6yz16nr6sDiQoHx6tm4O8OVYXHYOxcffFmCJBL0dgdvGp' crossorigin='anonymous'></script>
+    <link href='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css' rel='stylesheet' integrity='sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK' crossorigin='anonymous' />
+    <script src="https://unpkg.com/scrollama@3.2.0/build/scrollama.js" integrity="sha384-cQr5Cx9W8UDNyE09swPH4QMork1pq5sHUzY32DbxJ/WpWFSpr2MG8FGs/3pMjp2S" crossorigin="anonymous"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        a, a:hover, a:visited { color: #0071bc; }
+        #map { top: 0; height: 100vh; width: 100vw; position: fixed; }
+        #header { margin: auto; width: 100%; position: relative; z-index: 5; }
+        #header h1, #header h2, #header p { margin: 0; padding: 2vh 2vw; text-align: center; }
+        #footer { width: 100%; min-height: 5vh; padding: 2vh 0; text-align: center; line-height: 25px; font-size: 13px; position: relative; z-index: 5; }
+        #features { padding-top: 10vh; padding-bottom: 10vh; }
+        .hidden { visibility: hidden; }
+        .centered { width: 50vw; margin: 0 auto; }
+        .lefty { width: 33vw; margin-left: 5vw; }
+        .righty { width: 33vw; margin-left: 62vw; }
+        .fully { width: 100%; margin: auto; }
+        .light { color: #444; background-color: #fafafa; }
+        .dark { color: #fafafa; background-color: #444; }
+        .step { padding-bottom: 50vh; opacity: 0.25; transition: opacity 0.3s; }
+        .step.active { opacity: 0.95; }
+        /* Start/closing slides are empty full-height scroll targets (#998). */
+        .sm-slide-step { min-height: 90vh; padding-bottom: 0; }
+        /* Solid cover painted over the map for a blank/black slide; below the
+           nav, and pointer-events:none so the page still scrolls. */
+        #slide-cover { position: fixed; inset: 0; z-index: 15; display: none; pointer-events: none; }
+        .sm-card { position: relative; display: flex; flex-direction: column; max-height: 70vh; line-height: 22px; font-size: 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); overflow: hidden; }
+        .sm-bar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: move; user-select: none; touch-action: none; font-weight: 600; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,0.25); }
+        .sm-grip { opacity: 0.5; flex-shrink: 0; }
+        .sm-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sm-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 18px; }
+        .sm-body p { margin: 0; }
+        .sm-body img { width: 100%; max-height: 38vh; object-fit: cover; border-radius: 2px; }
+        .sm-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none; }
+        .sm-resize::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; opacity: 0.5; }
+        #nav { position: fixed; left: 12px; top: 52px; max-height: calc(100vh - 64px); width: 220px; overflow-y: auto; z-index: 20; border-radius: 6px; padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); font-size: 13px; }
+        #nav.dark { background: rgba(40,40,40,0.85); color: #fafafa; }
+        #nav.light { background: rgba(250,250,250,0.92); color: #444; }
+        #nav.hidden-nav { display: none; }
+        /* Toggle button for the chapter list (#995). */
+        #nav-toggle { position: fixed; left: 12px; top: 12px; z-index: 21; width: 32px; height: 32px; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+        #nav-toggle.dark { background: rgba(40,40,40,0.85); color: #fafafa; }
+        #nav-toggle.light { background: rgba(250,250,250,0.92); color: #444; }
+        .nav-item { display: flex; gap: 8px; align-items: center; padding: 7px 9px; border-radius: 4px; cursor: pointer; }
+        .nav-item:hover { background: rgba(127,127,127,0.18); }
+        .nav-item.active { background: rgba(63,177,206,0.22); font-weight: 600; }
+        .nav-num { width: 20px; height: 20px; border-radius: 50%; background: rgba(127,127,127,0.3); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+        .nav-item.active .nav-num { background: #3fb1ce; color: #fff; }
+        .nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Keep the nav toggle reachable on small screens so the chapter list
+           stays discoverable; only cap the pane width to the viewport. */
+        @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } #nav { width: auto; max-width: calc(100vw - 24px); } }
+        .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
+        .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: unset; }
+        #inset-map { position: fixed; width: 180px; height: 180px; border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 4px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); z-index: 10; }
+        #inset-map.top-left { top: 10px; left: 10px; }
+        #inset-map.top-right { top: 10px; right: 10px; }
+        #inset-map.bottom-left { bottom: 30px; left: 10px; }
+        #inset-map.bottom-right { bottom: 30px; right: 10px; }
+        .inset-marker { width: 12px; height: 12px; background-color: #ff6b6b; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="story"></div>
+
+    <script>
+        var config = {
+    "style": "https://tiles.openfreemap.org/styles/liberty",
+    "projection": "mercator",
+    "showMarkers": false,
+    "markerColor": "#3fb1ce",
+    "inset": true,
+    "insetPosition": "bottom-right",
+    "insetStyle": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    "insetZoom": 1,
+    "theme": "dark",
+    "auto": false,
+    "hideChapterNav": false,
+    "startSlide": "none",
+    "endSlide": "none",
+    "globalView": {
+        "center": [
+            0,
+            20
+        ],
+        "zoom": 0.6,
+        "pitch": 0,
+        "bearing": 0
+    },
+    "startStepId": "__story_start__",
+    "endStepId": "__story_end__",
+    "navToggleLabel": "Toggle chapter list",
+    "title": "Syria: Floods",
+    "subtitle": "May 2026",
+    "byline": "",
+    "footer": "",
+    "chapters": [
+        {
+            "id": "826bf9f7-1dea-48bf-9ca9-4e20dc537b6d",
+            "alignment": "left",
+            "hidden": false,
+            "title": "Syria: Floods - May 2026",
+            "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSslNcKf5wWpE1GiyU4N1nhE_xN5Qv2vwcPziFyuU2mZw&s=10",
+            "description": "<p>Since mid-May 2026, Syria has experienced severe flooding and rapidly rising water levels along the Euphrates River following a sharp increase in water inflow from upstream areas in Türkiye. Affected areas include Deir ez-Zor and Ar-Raqqa governorates in addition to Jarabulus from Aleppo governorate. The increased inflow, reportedly reaching approximately 2,200 m³ per second, is mainly attributed to seasonal snowmelt and the opening of spillways at upstream dams. As reservoir levels exceeded 97% of storage capacity, authorities initiated emergency water management measures, including the opening of three spillway gates at the Euphrates Dam for the first time in more than three decades. The flooding has resulted in the displacement of at least 1,626 families (approx. 8,280 people) in Deir ez-Zor Governorate, partial flooding of displacement sites in Ar-Raqqa, around 30 families, damage to agricultural land and disruption to critical infrastructure, including water stations and local access routes. (<a href=\"https://reliefweb.int/node/4215560/\">IFRC, 9 Jun 2026<\/a>)<\/p>",
+            "location": {
+                "center": [
+                    39.84635480259021,
+                    35.461527410510286
+                ],
+                "zoom": 7.823825531131459,
+                "pitch": 0,
+                "bearing": 0
+            },
+            "mapAnimation": "flyTo",
+            "rotateAnimation": false,
+            "callback": "",
+            "onChapterEnter": [
+                {
+                    "layer": "basemap-esri-world-imagery",
+                    "opacity": 1,
+                    "duration": 1000
+                },
+                {
+                    "layer": "vector-foppoad",
+                    "opacity": 0,
+                    "duration": 1000
+                }
+            ],
+            "onChapterExit": []
+        },
+        {
+            "id": "ae7ae0db-b40f-4c99-979f-4681171327d2",
+            "alignment": "left",
+            "hidden": false,
+            "title": "Using Sentinel-1 and Sentinel-2 Satellite Imagery",
+            "image": "",
+            "description": "<p>A rapid flood exposure assessment was conducted using Sentinel-1 SAR and Sentinel-2 optical imagery.\n<br>\n<br>\n<b>Sentinel-1 SAR<\/b>\n<br>Sentinel-1 SAR imagery forms the primary flood detector within the workflow. SAR sensors actively emit microwave signals and are capable of detecting flooding regardless of cloud cover, haze, lighting conditions. To minimize incidence-angle effects, all Sentinel-1 acquisitions (polarisation, backscatter and speckle filter) were selected from the same relative orbit and acquisition geometry. The workflow relies on change detection between pre-event and post-event SAR acquisitions.\n<br>\n<br>\n<b>Sentinel-2 optical imagery<\/b>\n<br>Sentinel-2 imagery is processed using the Normalized Difference Water Index (NDWI). NDWI is calculated using green and near-infrared reflectance and highlights surface water presence. Pre-event and post-event image collections are generated. A median composite is produced for each period and the change in NDWI is calculated.\n<br>\n<br>\n<b>JRC Global Surface Water Dataset<\/b>\n<br>Permanent water bodies are removed using the JRC Global Surface Water Dataset. Pixels classified as water more than 50% of the time between 1984 and 2021 are considered permanent water and excluded from flood detection.\n<br>\n<br>\nThe red areas shown on the map indicate the combined flood detections from Sentinel-1 and Sentinel-2<\/p>",
+            "location": {
+                "center": [
+                    39.21318654819106,
+                    35.86657689725662
+                ],
+                "zoom": 11.136296899595903,
+                "pitch": 0,
+                "bearing": 0
+            },
+            "mapAnimation": "flyTo",
+            "rotateAnimation": false,
+            "callback": "",
+            "onChapterEnter": [
+                {
+                    "layer": "basemap-esri-world-imagery",
+                    "opacity": 1,
+                    "duration": 1000
+                },
+                {
+                    "layer": "vector-foppoad",
+                    "opacity": 0,
+                    "duration": 1000
+                }
+            ],
+            "onChapterExit": []
+        },
+        {
+            "id": "61b2080a-58e6-4506-94ed-2419f659fa6b",
+            "alignment": "left",
+            "hidden": false,
+            "title": "Impacts on critical Infrastructure",
+            "image": "",
+            "description": "<p>\nThe assessment identified 13 water stations as directly exposed to flooding, 58 water stations located within 100 m of mapped flood extents, and a further 2 stations within 500 m of flooding. Overall, all 73 mapped water stations were located within 500 m of detected flood areas, indicating widespread potential exposure of water infrastructure across the study area. These findings provide an evidence-based prioritization framework for field verification, water quality monitoring, and infrastructure inspections.\n<\/p>",
+            "location": {
+                "center": [
+                    40.134029736208504,
+                    35.157437647575506
+                ],
+                "zoom": 9.185496595441512,
+                "pitch": 0,
+                "bearing": 0
+            },
+            "mapAnimation": "flyTo",
+            "rotateAnimation": false,
+            "callback": "",
+            "onChapterEnter": [
+                {
+                    "layer": "vector-foppoad",
+                    "opacity": 1,
+                    "duration": 1000
+                },
+                {
+                    "layer": "basemap-esri-world-imagery",
+                    "opacity": 1,
+                    "duration": 1000
+                }
+            ],
+            "onChapterExit": []
+        }
+    ]
+};
+    </script>
+    <script>
+        var layerTypes = {
+            'fill': ['fill-opacity'],
+            'line': ['line-opacity'],
+            'circle': ['circle-opacity', 'circle-stroke-opacity'],
+            'symbol': ['icon-opacity', 'text-opacity'],
+            'raster': ['raster-opacity'],
+            'fill-extrusion': ['fill-extrusion-opacity'],
+            'heatmap': ['heatmap-opacity'],
+            'hillshade': ['hillshade-exaggeration']
+        };
+        var alignments = { 'left': 'lefty', 'center': 'centered', 'right': 'righty', 'full': 'fully' };
+
+        function getLayerPaintType(layer) { var sl = map.getLayer(layer); return sl ? layerTypes[sl.type] : null; }
+        function setLayerOpacity(layer) {
+            if (!map.getLayer(layer.layer)) return;
+            var paintProps = getLayerPaintType(layer.layer);
+            if (!paintProps) return;
+            paintProps.forEach(function (prop) {
+                if (layer.duration) {
+                    map.setPaintProperty(layer.layer, prop + '-transition', { duration: layer.duration });
+                }
+                map.setPaintProperty(layer.layer, prop, layer.opacity);
+            });
+        }
+
+        var story = document.getElementById('story');
+        var features = document.createElement('div');
+        features.setAttribute('id', 'features');
+        var header = document.createElement('div');
+
+        if (config.title) { var t = document.createElement('h1'); t.innerText = config.title; header.appendChild(t); }
+        if (config.subtitle) { var s = document.createElement('h2'); s.innerText = config.subtitle; header.appendChild(s); }
+        if (config.byline) { var b = document.createElement('p'); b.innerText = config.byline; header.appendChild(b); }
+        if (header.children.length > 0) { header.classList.add(config.theme); header.setAttribute('id', 'header'); story.appendChild(header); }
+
+        function makeDraggable(handle, card) {
+            var dx = 0, dy = 0;
+            handle.addEventListener('pointerdown', function (e) {
+                e.preventDefault();
+                var sx = e.clientX, sy = e.clientY, bx = dx, by = dy;
+                function move(ev) { dx = bx + (ev.clientX - sx); dy = by + (ev.clientY - sy); card.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; }
+                function up() { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); }
+                window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+            });
+            handle.addEventListener('dblclick', function () { dx = 0; dy = 0; card.style.transform = ''; });
+        }
+        function makeResizable(handle, card) {
+            handle.addEventListener('pointerdown', function (e) {
+                e.preventDefault(); e.stopPropagation();
+                var sx = e.clientX, sy = e.clientY, r = card.getBoundingClientRect(), bw = r.width, bh = r.height;
+                function move(ev) { card.style.width = Math.max(200, bw + (ev.clientX - sx)) + 'px'; card.style.height = Math.max(120, bh + (ev.clientY - sy)) + 'px'; }
+                function up() { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); }
+                window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+            });
+        }
+
+        // Optional intro/outro slides are empty full-height scroll targets;
+        // their treatment (cover or camera) is applied on enter (#998).
+        function makeSlideStep(id) {
+            var s = document.createElement('div');
+            s.className = 'step sm-slide-step';
+            s.setAttribute('id', id);
+            return s;
+        }
+        if (config.startSlide && config.startSlide !== 'none') features.appendChild(makeSlideStep(config.startStepId));
+
+        config.chapters.forEach(function (record, idx) {
+            var container = document.createElement('div');
+            container.setAttribute('id', record.id);
+            container.classList.add('step');
+            container.classList.add(alignments[record.alignment] || 'centered');
+            // Don't pre-activate chapter 1 when a start slide opens the story, so
+            // its active state isn't shown during the intro slide (#998 review).
+            if (idx === 0 && !(config.startSlide && config.startSlide !== 'none')) container.classList.add('active');
+            if (record.hidden) container.classList.add('hidden');
+
+            var card = document.createElement('div');
+            card.className = 'sm-card ' + config.theme;
+
+            var bar = document.createElement('div');
+            bar.className = 'sm-bar';
+            var grip = document.createElement('span'); grip.className = 'sm-grip'; grip.textContent = '☰';
+            var barTitle = document.createElement('span'); barTitle.className = 'sm-title'; barTitle.innerText = record.title || ('Chapter ' + (idx + 1));
+            bar.appendChild(grip); bar.appendChild(barTitle);
+            makeDraggable(bar, card);
+            card.appendChild(bar);
+
+            var body = document.createElement('div');
+            body.className = 'sm-body';
+            if (record.image) { var img = new Image(); img.src = record.image; body.appendChild(img); }
+            if (record.description) { var p = document.createElement('p'); p.innerHTML = record.description; body.appendChild(p); }
+            card.appendChild(body);
+
+            var rz = document.createElement('div'); rz.className = 'sm-resize';
+            makeResizable(rz, card);
+            card.appendChild(rz);
+
+            container.appendChild(card);
+            features.appendChild(container);
+        });
+        if (config.endSlide && config.endSlide !== 'none') features.appendChild(makeSlideStep(config.endStepId));
+        story.appendChild(features);
+
+        // Navigation pane: list chapters and jump to one on click.
+        var nav = document.createElement('div');
+        nav.id = 'nav';
+        nav.className = config.theme;
+        config.chapters.forEach(function (record, idx) {
+            var item = document.createElement('div');
+            item.className = 'nav-item' + ((idx === 0 && !(config.startSlide && config.startSlide !== 'none')) ? ' active' : '');
+            item.setAttribute('data-id', record.id);
+            var num = document.createElement('span'); num.className = 'nav-num'; num.innerText = (idx + 1);
+            var t = document.createElement('span'); t.className = 'nav-title'; t.innerText = record.title || ('Chapter ' + (idx + 1));
+            item.appendChild(num); item.appendChild(t);
+            item.addEventListener('click', function () {
+                var c = document.getElementById(record.id);
+                var card = c && c.querySelector('.sm-card');
+                (card || c).scrollIntoView({ block: 'center' });
+            });
+            nav.appendChild(item);
+        });
+        document.body.appendChild(nav);
+        var navItems = nav.querySelectorAll('.nav-item');
+
+        // Toggle button so the chapter list can be opened/closed; it starts
+        // collapsed for a "discoverable chapters" story (#995).
+        var navToggle = document.createElement('button');
+        navToggle.id = 'nav-toggle';
+        navToggle.className = config.theme;
+        navToggle.type = 'button';
+        navToggle.title = config.navToggleLabel;
+        navToggle.setAttribute('aria-label', config.navToggleLabel);
+        // aria-pressed mirrors the in-app presenter so assistive tech announces
+        // whether the chapter list is open (#995). It is true when the nav shows.
+        navToggle.setAttribute('aria-pressed', config.hideChapterNav ? 'false' : 'true');
+        navToggle.textContent = '☰';
+        navToggle.addEventListener('click', function () {
+            var nowHidden = nav.classList.toggle('hidden-nav');
+            navToggle.setAttribute('aria-pressed', nowHidden ? 'false' : 'true');
+        });
+        document.body.appendChild(navToggle);
+        if (config.hideChapterNav) nav.classList.add('hidden-nav');
+
+        // Solid cover for a blank/black start or closing slide (#998).
+        var cover = document.createElement('div');
+        cover.id = 'slide-cover';
+        document.body.appendChild(cover);
+        function slideBg(mode) {
+            if (mode === 'black') return '#000000';
+            if (mode === 'blank') return config.theme === 'light' ? '#fafafa' : '#444444';
+            return null;
+        }
+
+        var footer = document.createElement('div');
+        if (config.footer) { var f = document.createElement('p'); f.innerHTML = config.footer; footer.appendChild(f); }
+        if (footer.children.length > 0) { footer.classList.add(config.theme); footer.setAttribute('id', 'footer'); story.appendChild(footer); }
+
+        // Apply the start slide's initial state during DOM construction (before
+        // map load) so a slow style/tile load can't flash the story header/footer
+        // or an uncovered map on a supposedly text-free start slide (#998 review).
+        if (config.startSlide && config.startSlide !== 'none') {
+            var startHeaderEl = document.getElementById('header');
+            if (startHeaderEl) startHeaderEl.classList.add('hidden');
+            var startFooterEl = document.getElementById('footer');
+            if (startFooterEl) startFooterEl.classList.add('hidden');
+            var startBg = slideBg(config.startSlide);
+            if (startBg) { cover.style.background = startBg; cover.style.display = 'block'; }
+        }
+
+        // Shape right-to-left scripts (Arabic, Hebrew, Persian, …) correctly so
+        // basemap labels are not rendered reversed. Lazy-loaded, so it only
+        // downloads when an RTL label is actually encountered. The URL is loaded
+        // by a Web Worker via importScripts(), which (unlike a <script> tag)
+        // cannot carry an SRI integrity hash; we pin the exact version instead,
+        // matching the CDN trust already extended to maplibre-gl/scrollama above.
+        if (maplibregl.getRTLTextPluginStatus?.() === 'unavailable') {
+            // MapLibre GL v4+ signature is (url, lazy?) returning a Promise; the
+            // lazy flag is the SECOND arg, and the Promise must be caught.
+            maplibregl.setRTLTextPlugin('https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.4.0/dist/mapbox-gl-rtl-text.js', true).catch(function (e) { console.error('[GeoLibre] RTL plugin failed', e); });
+        }
+
+        // For a global start slide, open the map (and inset/markers) at the
+        // global view rather than chapter 0, so a slow style/tile load doesn't
+        // flash chapter 0's view before the load handler flies out (#998 review).
+        var openLocation = config.startSlide === 'global' ? config.globalView : config.chapters[0].location;
+
+        var map = new maplibregl.Map({
+            container: 'map',
+            style: config.style,
+            center: openLocation.center,
+            zoom: openLocation.zoom,
+            bearing: openLocation.bearing,
+            pitch: openLocation.pitch,
+            interactive: false
+        });
+
+        var insetMap = null, insetMarker = null;
+        if (config.inset) {
+            var insetContainer = document.createElement('div');
+            insetContainer.id = 'inset-map';
+            insetContainer.classList.add(config.insetPosition || 'bottom-left');
+            document.body.appendChild(insetContainer);
+            insetMap = new maplibregl.Map({ container: 'inset-map', style: config.insetStyle, center: openLocation.center, zoom: config.insetZoom || 1, interactive: false, attributionControl: false });
+            var markerEl = document.createElement('div');
+            markerEl.className = 'inset-marker';
+            insetMarker = new maplibregl.Marker({ element: markerEl }).setLngLat(openLocation.center).addTo(insetMap);
+            // The global overview shows no marker; hide it immediately.
+            if (config.startSlide === 'global') insetMarker.getElement().style.visibility = 'hidden';
+        }
+
+        var marker = null;
+        if (config.showMarkers) {
+            marker = new maplibregl.Marker({ color: config.markerColor });
+            marker.setLngLat(openLocation.center).addTo(map);
+            if (config.startSlide === 'global') marker.getElement().style.visibility = 'hidden';
+        }
+
+        var scroller = scrollama();
+        var cameraToken = 0;
+        // Set once the start slide is initialized synchronously on load, so the
+        // first (redundant) Scrollama enter for it is skipped (#998 review).
+        var startSlideInitialized = false;
+
+        map.once('load', function () {
+            // Match the in-app projection (globe by default) so the exported
+            // story does not silently fall back to 2D Mercator (#917).
+            try {
+                map.setProjection({ type: config.projection || 'globe' });
+            } catch (e) {
+                console.error('[GeoLibre] projection failed', e);
+            }
+    map.addSource("basemap-esri-world-imagery-source", {"type":"raster","tiles":["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],"tileSize":256,"maxzoom":19,"attribution":"Tiles &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community"});
+    map.addLayer({"type":"raster","paint":{"raster-opacity":1,"raster-brightness-min":0,"raster-brightness-max":1,"raster-saturation":0,"raster-contrast":0,"raster-hue-rotate":0},"id":"basemap-esri-world-imagery","source":"basemap-esri-world-imagery-source"});
+    map.addSource("vector-foppoad-source", {"type":"geojson","data":{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[38.834409,35.933762]},"properties":{"system:index":"0","Governorate":"Raqqa","Water Station name":"Abu Rajab ","distance_to_flood_m":"22.360679774997898","flooded_20m":"1","lat":"35.933762","lon":"38.834409","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[38.834409,35.933762]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[38.760706,35.886767]},"properties":{"system:index":"1","Governorate":"Raqqa","Water Station name":"Hammam  ","distance_to_flood_m":"14.142135623730951","flooded_20m":"1","lat":"35.886767","lon":"38.760706","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[38.76070599999999,35.886767]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.382975,35.827538]},"properties":{"system:index":"2","Governorate":"Raqqa","Water Station name":"Zur Shummer  ","distance_to_flood_m":"31.622776601683796","flooded_20m":"0","lat":"35.827538","lon":"39.382975","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.382975,35.827538]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.005862,35.930711]},"properties":{"system:index":"3","Governorate":"Raqqa","Water Station name":"Raqqa Main Station","distance_to_flood_m":"89.44271909999159","flooded_20m":"0","lat":"35.930711","lon":"39.005862","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.005862,35.930711]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[38.95313,35.940439]},"properties":{"system:index":"4","Governorate":"Raqqa","Water Station name":"Hawi Al Hawa","distance_to_flood_m":"0.0","flooded_20m":"1","lat":"35.940439","lon":"38.95313","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[38.95313,35.940439]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.492233,35.798799]},"properties":{"system:index":"5","Governorate":"Raqqa","Water Station name":"Al Mugla","distance_to_flood_m":"22.360679774997898","flooded_20m":"0","lat":"35.798799","lon":"39.492233","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.492233,35.798798999999995]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.69573,35.765137]},"properties":{"system:index":"6","Governorate":"Raqqa","Water Station name":"Jazrat Abo Humaid","distance_to_flood_m":"41.23105625617661","flooded_20m":"0","lat":"35.765137","lon":"39.69573","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.69573,35.765137]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.1889,35.87042]},"properties":{"system:index":"7","Governorate":"Raqqa","Water Station name":"Hamra Balasem","distance_to_flood_m":"28.284271247461902","flooded_20m":"0","lat":"35.87042","lon":"39.1889","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.1889,35.87042]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[38.772867,35.905673]},"properties":{"system:index":"8","Governorate":"Raqqa","Water Station name":"Hawijt Farag","distance_to_flood_m":"20.0","flooded_20m":"1","lat":"35.905673","lon":"38.772867","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[38.772867000000005,35.905673]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[38.933787,35.92883]},"properties":{"system:index":"9","Governorate":"Raqqa","Water Station name":"Hawijt Zahra","distance_to_flood_m":"0.0","flooded_20m":"1","lat":"35.92883","lon":"38.933787","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[38.933787,35.92882999999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.630459,35.798161]},"properties":{"system:index":"10","Governorate":"Raqqa","Water Station name":"Al Shaher","distance_to_flood_m":"56.568542494923804","flooded_20m":"0","lat":"35.798161","lon":"39.630459","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.630459,35.798161]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.13628351,35.35950306]},"properties":{"system:index":"11","Governorate":"Deir-ez-Zor","Water Station name":"Al Husainia (ne)","distance_to_flood_m":"50.0","flooded_20m":"0","lat":"35.35950306","lon":"40.13628351","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.13628351,35.35950306000001]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.0808398,35.40444293]},"properties":{"system:index":"12","Governorate":"Deir-ez-Zor","Water Station name":"Al Fourat","distance_to_flood_m":"0.0","flooded_20m":"1","lat":"35.40444293","lon":"40.0808398","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.0808398,35.40444293]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.15618333,35.34429444]},"properties":{"system:index":"13","Governorate":"Deir-ez-Zor","Water Station name":"Deir-ez-Zor (Al Qazzel)","distance_to_flood_m":"183.5755975068582","flooded_20m":"0","lat":"35.34429444","lon":"40.15618333","risk_level":"Potentially affected",".geo":"{\"type\":\"Point\",\"coordinates\":[40.156183330000005,35.34429444]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.95175833,35.535475]},"properties":{"system:index":"14","Governorate":"Deir-ez-Zor","Water Station name":"Ali","distance_to_flood_m":"50.0","flooded_20m":"0","lat":"35.535475","lon":"39.95175833","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.95175833,35.535475]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.69555071,35.76526724]},"properties":{"system:index":"15","Governorate":"Deir-ez-Zor","Water Station name":"Jazaret Elbuhmeid","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"35.76526724","lon":"39.69555071","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.69555071,35.76526724]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.69555071,35.76526724]},"properties":{"system:index":"16","Governorate":"Deir-ez-Zor","Water Station name":"Jazaret Milaj","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"35.76526724","lon":"39.69555071","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.69555071,35.76526724]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.91041866,35.54697489]},"properties":{"system:index":"17","Governorate":"Deir-ez-Zor","Water Station name":"Kasra","distance_to_flood_m":"22.360679774997898","flooded_20m":"1","lat":"35.54697489","lon":"39.91041866","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.91041866,35.54697489]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.84316944,35.67084722]},"properties":{"system:index":"18","Governorate":"Deir-ez-Zor","Water Station name":"Kobar","distance_to_flood_m":"31.622776601683796","flooded_20m":"0","lat":"35.67084722","lon":"39.84316944","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.84316944,35.67084722]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.09353611,35.40614444]},"properties":{"system:index":"19","Governorate":"Deir-ez-Zor","Water Station name":"Lower Safira","distance_to_flood_m":"22.360679774997898","flooded_20m":"1","lat":"35.40614444","lon":"40.09353611","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.09353611,35.40614444]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.07229167,35.44603333]},"properties":{"system:index":"20","Governorate":"Deir-ez-Zor","Water Station name":"Mhemideh","distance_to_flood_m":"28.284271247461902","flooded_20m":"0","lat":"35.44603333","lon":"40.07229167","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.07229167,35.44603333]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.97112457,35.52214268]},"properties":{"system:index":"21","Governorate":"Deir-ez-Zor","Water Station name":"Sawa","distance_to_flood_m":"60.82762530298219","flooded_20m":"0","lat":"35.52214268","lon":"39.97112457","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.97112457,35.52214268000001]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.69555071,35.76526724]},"properties":{"system:index":"22","Governorate":"Deir-ez-Zor","Water Station name":"Shate","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"35.76526724","lon":"39.69555071","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.69555071,35.76526724]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.43173034,35.10349969]},"properties":{"system:index":"23","Governorate":"Deir-ez-Zor","Water Station name":"Shiheil","distance_to_flood_m":"94.33981132056603","flooded_20m":"0","lat":"35.10349969","lon":"40.43173034","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.431730339999994,35.10349969]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.43179133,35.06706368]},"properties":{"system:index":"24","Governorate":"Deir-ez-Zor","Water Station name":"Shiheil","distance_to_flood_m":"31.622776601683796","flooded_20m":"0","lat":"35.06706368","lon":"40.43179133","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.43179133,35.06706368]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.4272428,35.12479347]},"properties":{"system:index":"25","Governorate":"Deir-ez-Zor","Water Station name":"Zir","distance_to_flood_m":"64.03124237432849","flooded_20m":"0","lat":"35.12479347","lon":"40.4272428","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.4272428,35.12479347]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.21484008,35.31384491]},"properties":{"system:index":"26","Governorate":"Deir-ez-Zor","Water Station name":"Mreiyeh","distance_to_flood_m":"20.0","flooded_20m":"1","lat":"35.31384491","lon":"40.21484008","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.21484008,35.31384491]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.41097964,35.19844527]},"properties":{"system:index":"27","Governorate":"Deir-ez-Zor","Water Station name":"Toob","distance_to_flood_m":"31.622776601683796","flooded_20m":"0","lat":"35.19844527","lon":"40.41097964","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.41097964,35.19844526999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.90909741,35.53227549]},"properties":{"system:index":"28","Governorate":"Deir-ez-Zor","Water Station name":"Masrab","distance_to_flood_m":"28.284271247461902","flooded_20m":"0","lat":"35.53227549","lon":"39.90909741","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.90909741,35.532275489999996]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.61312821,35.7678929]},"properties":{"system:index":"29","Governorate":"Deir-ez-Zor","Water Station name":"Old Maadan","distance_to_flood_m":"80.62257748298549","flooded_20m":"0","lat":"35.7678929","lon":"39.61312821","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.61312821,35.7678929]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.74872981,35.73015455]},"properties":{"system:index":"30","Governorate":"Deir-ez-Zor","Water Station name":"Qasabi","distance_to_flood_m":"100.4987562112089","flooded_20m":"0","lat":"35.73015455","lon":"39.74872981","risk_level":"Potentially affected",".geo":"{\"type\":\"Point\",\"coordinates\":[39.74872981,35.73015455]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.96192966,35.51800244]},"properties":{"system:index":"31","Governorate":"Deir-ez-Zor","Water Station name":"Shmeitiyeh","distance_to_flood_m":"22.360679774997898","flooded_20m":"0","lat":"35.51800244","lon":"39.96192966","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.96192966000001,35.518002440000004]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[39.8658438,35.58204285]},"properties":{"system:index":"32","Governorate":"Deir-ez-Zor","Water Station name":"Tarif","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"35.58204285","lon":"39.8658438","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[39.86584380000001,35.58204285]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.03138161,35.47500384]},"properties":{"system:index":"33","Governorate":"Deir-ez-Zor","Water Station name":"Zghir Shamiyeh","distance_to_flood_m":"40.0","flooded_20m":"0","lat":"35.47500384","lon":"40.03138161","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.03138160999999,35.47500384]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.22561087,35.30812808]},"properties":{"system:index":"34","Governorate":"Deir-ez-Zor","Water Station name":"Mrat","distance_to_flood_m":"20.0","flooded_20m":"1","lat":"35.30812808","lon":"40.22561087","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.22561087,35.30812808]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.91702991,34.51684859]},"properties":{"system:index":"35","Governorate":"Deir-ez-Zor","Water Station name":"Ashayer","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"34.51684859","lon":"40.91702991","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.91702990999999,34.51684859]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.91204604,34.49358058]},"properties":{"system:index":"36","Governorate":"Deir-ez-Zor","Water Station name":"Dahite Al Sukareh","distance_to_flood_m":"60.82762530298219","flooded_20m":"0","lat":"34.49358058","lon":"40.91204604","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.91204603999999,34.49358058]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.98193695,34.43421857]},"properties":{"system:index":"37","Governorate":"Deir-ez-Zor","Water Station name":"Hura","distance_to_flood_m":"0.0","flooded_20m":"1","lat":"34.43421857","lon":"40.98193695","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.98193695,34.43421857]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.88183287,34.65260472]},"properties":{"system:index":"38","Governorate":"Deir-ez-Zor","Water Station name":"Ramadi","distance_to_flood_m":"28.284271247461902","flooded_20m":"0","lat":"34.65260472","lon":"40.88183287","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.881832870000004,34.65260471999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.91898477,34.59297844]},"properties":{"system:index":"39","Governorate":"Deir-ez-Zor","Water Station name":"Siyal","distance_to_flood_m":"40.0","flooded_20m":"0","lat":"34.59297844","lon":"40.91898477","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.91898477000001,34.59297844]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.639725,34.81435278]},"properties":{"system:index":"40","Governorate":"Deir-ez-Zor","Water Station name":"Abu Hamam","distance_to_flood_m":"44.721359549995796","flooded_20m":"0","lat":"34.81435278","lon":"40.639725","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.639725,34.81435277999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.64665556,34.80770833]},"properties":{"system:index":"41","Governorate":"Deir-ez-Zor","Water Station name":"Abu Hamam","distance_to_flood_m":"64.03124237432849","flooded_20m":"0","lat":"34.80770833","lon":"40.64665556","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.64665556,34.80770833]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.88433611,34.65613056]},"properties":{"system:index":"42","Governorate":"Deir-ez-Zor","Water Station name":"Abu Hasan","distance_to_flood_m":"63.24555320336759","flooded_20m":"0","lat":"34.65613056","lon":"40.88433611","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.88433611,34.65613056000001]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.73170833,34.7577]},"properties":{"system:index":"43","Governorate":"Deir-ez-Zor","Water Station name":"Gharanij","distance_to_flood_m":"10.0","flooded_20m":"1","lat":"34.7577","lon":"40.73170833","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.73170833,34.7577]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.82381944,34.68973056]},"properties":{"system:index":"44","Governorate":"Deir-ez-Zor","Water Station name":"Hajin","distance_to_flood_m":"44.721359549995796","flooded_20m":"0","lat":"34.68973056","lon":"40.82381944","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.82381944,34.689730560000015]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.67370833,34.78340278]},"properties":{"system:index":"45","Governorate":"Deir-ez-Zor","Water Station name":"Kishkiyeh","distance_to_flood_m":"20.0","flooded_20m":"1","lat":"34.78340278","lon":"40.67370833","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.67370833,34.78340278]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.67885,34.781925]},"properties":{"system:index":"46","Governorate":"Deir-ez-Zor","Water Station name":"Kishkiyeh","distance_to_flood_m":"30.0","flooded_20m":"0","lat":"34.781925","lon":"40.67885","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.67885,34.781925]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.81143056,34.69795556]},"properties":{"system:index":"47","Governorate":"Deir-ez-Zor","Water Station name":"Abbas","distance_to_flood_m":"50.0","flooded_20m":"0","lat":"34.69795556","lon":"40.81143056","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.81143056,34.69795555999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.83183903,34.65172412]},"properties":{"system:index":"48","Governorate":"Deir-ez-Zor","Water Station name":"Jalaa","distance_to_flood_m":"44.721359549995796","flooded_20m":"0","lat":"34.65172412","lon":"40.83183903","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.83183902999999,34.65172412]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.80305267,34.65743809]},"properties":{"system:index":"49","Governorate":"Deir-ez-Zor","Water Station name":"Qataa","distance_to_flood_m":"44.721359549995796","flooded_20m":"0","lat":"34.65743809","lon":"40.80305267","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.80305267,34.65743809]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.80592144,34.65488005]},"properties":{"system:index":"50","Governorate":"Deir-ez-Zor","Water Station name":"Qataa","distance_to_flood_m":"60.0","flooded_20m":"0","lat":"34.65488005","lon":"40.80592144","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.80592144,34.654880049999996]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.76655949,34.7140298]},"properties":{"system:index":"51","Governorate":"Deir-ez-Zor","Water Station name":"Salhiyeh","distance_to_flood_m":"53.85164807134504","flooded_20m":"0","lat":"34.7140298","lon":"40.76655949","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.76655949,34.7140298]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.97412778,34.44736389]},"properties":{"system:index":"52","Governorate":"Deir-ez-Zor","Water Station name":"Al Bagouz","distance_to_flood_m":"50.0","flooded_20m":"0","lat":"34.44736389","lon":"40.97412778","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.97412778,34.44736389]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.932975,34.54785278]},"properties":{"system:index":"53","Governorate":"Deir-ez-Zor","Water Station name":"Al Bou Badran","distance_to_flood_m":"14.142135623730951","flooded_20m":"1","lat":"34.54785278","lon":"40.932975","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.932975,34.54785278]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.92558333,34.49036667]},"properties":{"system:index":"54","Governorate":"Deir-ez-Zor","Water Station name":"Alsafafnah","distance_to_flood_m":"30.0","flooded_20m":"0","lat":"34.49036667","lon":"40.92558333","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.92558333,34.49036667]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.91066111,34.63524444]},"properties":{"system:index":"55","Governorate":"Deir-ez-Zor","Water Station name":"Shafa","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"34.63524444","lon":"40.91066111","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.91066110999999,34.63524444000001]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.923167,34.591181]},"properties":{"system:index":"56","Governorate":"Deir-ez-Zor","Water Station name":"Shafa","distance_to_flood_m":"50.99019513592785","flooded_20m":"0","lat":"34.591181","lon":"40.923167","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.923167,34.591181]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.92470833,34.55437778]},"properties":{"system:index":"57","Governorate":"Deir-ez-Zor","Water Station name":"Shafa","distance_to_flood_m":"41.23105625617661","flooded_20m":"0","lat":"34.55437778","lon":"40.92470833","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.92470833000001,34.55437778]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.45941603,35.04647471]},"properties":{"system:index":"58","Governorate":"Deir-ez-Zor","Water Station name":"Lower Hawi Baqras","distance_to_flood_m":"42.426406871192846","flooded_20m":"0","lat":"35.04647471","lon":"40.45941603","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.45941603,35.046474710000005]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.50817754,34.9860271]},"properties":{"system:index":"59","Governorate":"Deir-ez-Zor","Water Station name":"Mahkan","distance_to_flood_m":"31.622776601683796","flooded_20m":"0","lat":"34.9860271","lon":"40.50817754","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.50817754,34.9860271]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.40253505,35.15820621]},"properties":{"system:index":"60","Governorate":"Deir-ez-Zor","Water Station name":"Saalu","distance_to_flood_m":"50.99019513592785","flooded_20m":"0","lat":"35.15820621","lon":"40.40253505","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.40253505,35.15820621]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.41523986,35.1328034]},"properties":{"system:index":"61","Governorate":"Deir-ez-Zor","Water Station name":"Zbara","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"35.1328034","lon":"40.41523986","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.41523986,35.13280339999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.62619167,34.85494444]},"properties":{"system:index":"62","Governorate":"Deir-ez-Zor","Water Station name":"Abu Hardoub","distance_to_flood_m":"20.0","flooded_20m":"0","lat":"34.85494444","lon":"40.62619167","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.62619167,34.85494444]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.57294444,34.93686667]},"properties":{"system:index":"63","Governorate":"Deir-ez-Zor","Water Station name":"Darnaj","distance_to_flood_m":"50.99019513592785","flooded_20m":"0","lat":"34.93686667","lon":"40.57294444","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.57294444,34.93686667]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.47524167,35.04888611]},"properties":{"system:index":"64","Governorate":"Deir-ez-Zor","Water Station name":"Hawayej","distance_to_flood_m":"40.0","flooded_20m":"0","lat":"35.04888611","lon":"40.47524167","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.47524167,35.04888611]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.60189722,34.87588889]},"properties":{"system:index":"65","Governorate":"Deir-ez-Zor","Water Station name":"Karama","distance_to_flood_m":"30.0","flooded_20m":"0","lat":"34.87588889","lon":"40.60189722","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.60189722,34.87588889]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.55584722,34.96404444]},"properties":{"system:index":"66","Governorate":"Deir-ez-Zor","Water Station name":"Shinan","distance_to_flood_m":"14.142135623730951","flooded_20m":"1","lat":"34.96404444","lon":"40.55584722","risk_level":"Flooded",".geo":"{\"type\":\"Point\",\"coordinates\":[40.55584721999999,34.964044439999995]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.58452222,34.89101389]},"properties":{"system:index":"67","Governorate":"Deir-ez-Zor","Water Station name":"Sweidan Jazira","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"34.89101389","lon":"40.58452222","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.58452222,34.89101389]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.53880556,34.97505556]},"properties":{"system:index":"68","Governorate":"Deir-ez-Zor","Water Station name":"Tayyana","distance_to_flood_m":"80.62257748298549","flooded_20m":"0","lat":"34.97505556","lon":"40.53880556","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.53880556,34.97505556000001]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.57011857,34.92469361]},"properties":{"system:index":"69","Governorate":"Deir-ez-Zor","Water Station name":"Ashara","distance_to_flood_m":"36.05551275463989","flooded_20m":"0","lat":"34.92469361","lon":"40.57011857","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.57011857,34.92469361]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.5768689,34.87389303]},"properties":{"system:index":"70","Governorate":"Deir-ez-Zor","Water Station name":"Dablan","distance_to_flood_m":"31.622776601683796","flooded_20m":"0","lat":"34.87389303","lon":"40.5768689","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.5768689,34.87389302999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.59243601,34.86399271]},"properties":{"system:index":"71","Governorate":"Deir-ez-Zor","Water Station name":"Sbeikhan","distance_to_flood_m":"80.62257748298549","flooded_20m":"0","lat":"34.86399271","lon":"40.59243601","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.59243600999999,34.86399270999999]}"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[40.64093772,34.80933054]},"properties":{"system:index":"72","Governorate":"Deir-ez-Zor","Water Station name":"Tishrine","distance_to_flood_m":"50.99019513592785","flooded_20m":"0","lat":"34.80933054","lon":"40.64093772","risk_level":"Near flood",".geo":"{\"type\":\"Point\",\"coordinates\":[40.64093772,34.80933054]}"}}]}});
+    map.addLayer({"type":"circle","paint":{"circle-color":"#3388ff","circle-radius":6,"circle-stroke-color":"transparent","circle-stroke-width":2,"circle-opacity":0,"circle-stroke-opacity":0},"id":"vector-foppoad","source":"vector-foppoad-source"});
+
+            // Drive a start/closing slide (#998): blank/black paint a solid
+            // cover over the map; global zooms out; "adjacent" previews the
+            // first chapter (start) or holds the last chapter (end) with the
+            // text hidden.
+            // Hide/show the map (and inset) markers. The "global" overview slide
+            // is a clean world view, so its marker is hidden; chapters and the
+            // adjacent preview keep theirs.
+            function setMarkersVisible(visible) {
+                var value = visible ? '' : 'hidden';
+                if (marker) marker.getElement().style.visibility = value;
+                if (insetMarker) insetMarker.getElement().style.visibility = value;
+            }
+
+            // Hide/show the story title/byline/footer chrome. Slides are
+            // documented as text-free, so the persistent header and footer hide
+            // while one is active, matching the in-app presenter (the blank/black
+            // cover already hides them; this also clears them for global/adjacent).
+            function setChromeHidden(hidden) {
+                var headerEl = document.getElementById('header');
+                var footerEl = document.getElementById('footer');
+                if (headerEl) headerEl.classList.toggle('hidden', hidden);
+                if (footerEl) footerEl.classList.toggle('hidden', hidden);
+            }
+
+            function enterSlide(mode, isStart) {
+                navItems.forEach(function (it) { it.classList.remove('active'); });
+                map.stop();
+                ++cameraToken;
+                setChromeHidden(true);
+                var bg = slideBg(mode);
+                if (bg) { cover.style.background = bg; cover.style.display = 'block'; return; }
+                cover.style.display = 'none';
+                // The export never ships with zero chapters (buildStoryMapHtml
+                // throws first), but fall back to the global view defensively so
+                // an "adjacent" slide can never read an undefined location.
+                var adjacent = isStart
+                    ? config.chapters[0]
+                    : config.chapters[config.chapters.length - 1];
+                var loc = mode === 'global'
+                    ? config.globalView
+                    : ((adjacent && adjacent.location) || config.globalView);
+                map.flyTo(loc);
+                // Global overview shows no marker; adjacent preview keeps it.
+                if (mode === 'global') {
+                    setMarkersVisible(false);
+                } else {
+                    setMarkersVisible(true);
+                    if (config.showMarkers && marker) marker.setLngLat(loc.center);
+                    if (insetMap && insetMarker) { insetMap.setCenter(loc.center); insetMarker.setLngLat(loc.center); }
+                }
+            }
+
+            scroller.setup({ step: '.step', offset: 0.5 })
+                .onStepEnter(function (response) {
+                    var id = response.element.id;
+                    response.element.classList.add('active');
+                    if (id === config.startStepId || id === config.endStepId) {
+                        // Skip the redundant first enter for the start slide that
+                        // was already initialized synchronously on load, so
+                        // global/adjacent modes don't fly the camera twice.
+                        if (id === config.startStepId && startSlideInitialized) {
+                            startSlideInitialized = false;
+                            return;
+                        }
+                        enterSlide(id === config.startStepId ? config.startSlide : config.endSlide, id === config.startStepId);
+                        return;
+                    }
+                    cover.style.display = 'none';
+                    setChromeHidden(false);
+                    var idx = config.chapters.findIndex(function (c) { return c.id === id; });
+                    var chapter = config.chapters[idx];
+                    if (!chapter) return;
+                    navItems.forEach(function (it) { it.classList.toggle('active', it.getAttribute('data-id') === id); });
+                    // Cancel any in-progress move (e.g. a prior chapter's rotation)
+                    // and bump the token so its pending moveend handler is ignored.
+                    map.stop();
+                    var token = ++cameraToken;
+                    map[chapter.mapAnimation || 'flyTo'](chapter.location);
+                    // Re-show the marker in case a preceding global slide hid it.
+                    setMarkersVisible(true);
+                    if (config.showMarkers && marker) marker.setLngLat(chapter.location.center);
+                    if (insetMap && insetMarker) { insetMap.setCenter(chapter.location.center); insetMarker.setLngLat(chapter.location.center); }
+                    if (chapter.onChapterEnter.length > 0) chapter.onChapterEnter.forEach(setLayerOpacity);
+                    if (chapter.rotateAnimation) {
+                        map.once('moveend', function () {
+                            if (token !== cameraToken) return;
+                            var bearing = map.getBearing();
+                            map.rotateTo(bearing + 180, { duration: 30000, easing: function (t) { return t; } });
+                        });
+                    }
+                })
+                .onStepExit(function (response) {
+                    response.element.classList.remove('active');
+                    var chapter = config.chapters.find(function (c) { return c.id === response.element.id; });
+                    if (!chapter) return;
+                    if (chapter.onChapterExit.length > 0) chapter.onChapterExit.forEach(setLayerOpacity);
+                });
+
+            // Set the start slide's camera deterministically on load, mirroring
+            // the in-app presenter's first step (#998). This runs synchronously
+            // before Scrollama's first (async) onStepEnter fires for the in-view
+            // start slide, so the flag below skips that redundant second enter
+            // (which would otherwise fly the camera twice for global/adjacent).
+            if (config.startSlide && config.startSlide !== 'none') {
+                enterSlide(config.startSlide, true);
+                startSlideInitialized = true;
+            }
+        });
+
+        window.addEventListener('resize', scroller.resize);
+    </script>
+</body>
+
+</html>
